@@ -5,34 +5,28 @@ pub fn build(b: *std.Build) void {
 }
 pub const ShaderBuilder = struct {
     pub const Options = struct {};
-    pub const DirOptions = struct {
-        src_dir: []const u8,
-        out_dir: []const u8,
-    };
-
     pub fn init(o: Options) ShaderBuilder {
         _ = o;
         return .{};
     }
 
-    /// Registers all shaders in src_dir to compile into out_dir
-    pub fn build_dir(self: *const ShaderBuilder, b: *std.Build, o: DirOptions) !void {
+    /// Compiles all shaders from src to destination
+    pub fn build_dir(self: *const ShaderBuilder, b: *std.Build, src_dir: []const u8, dst_dir: []const u8) !void {
         _ = self;
-        var alloc = b.allocator;
+        const alloc = b.allocator;
 
         const cwd = std.fs.cwd();
-        const dir = try cwd.openDir(o.src_dir, .{ .iterate = true });
+        const dir = try cwd.openDir(src_dir, .{ .iterate = true });
         var it = dir.iterate();
 
-        // Ensure output directory exists
-        try cwd.makePath(o.out_dir);
+        try cwd.makePath(dst_dir);
 
         while (try it.next()) |file| {
             if (file.kind != .file) continue;
 
-            const src = try std.fmt.allocPrint(alloc, "{s}{s}", .{ o.src_dir, file.name });
+            const src = try std.fmt.allocPrint(alloc, "{s}{s}", .{ src_dir, file.name });
             defer alloc.free(src);
-            const out = try std.fmt.allocPrint(alloc, "{s}{s}.spv", .{ o.out_dir, file.name });
+            const out = try std.fmt.allocPrint(alloc, "{s}{s}.spv", .{ dst_dir, file.name });
             defer alloc.free(out);
 
             var cmd = std.process.Child.init(&[_][]const u8{ "glslc", src, "-O", "-Werror", "-o", out }, alloc);
@@ -40,5 +34,14 @@ pub const ShaderBuilder = struct {
 
             _ = try cmd.wait();
         }
+    }
+
+    // build a single file
+    pub fn build_file(self: *const ShaderBuilder, b: *std.Build, src: []const u8, dst: []const u8) !void {
+        _ = self;
+        const alloc = b.allocator;
+
+        var cmd = std.process.Child.init(&[_][]const u8{ "glslc", src, "-O", "-Werror", "-o", dst }, alloc);
+        try cmd.spawn();
     }
 };
