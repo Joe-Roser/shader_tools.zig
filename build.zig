@@ -1,4 +1,6 @@
 const std = @import("std");
+const Io = std.Io;
+const Alloc = std.mem.Allocator;
 
 pub fn build(b: *std.Build) void {
     _ = b;
@@ -11,17 +13,16 @@ pub const ShaderBuilder = struct {
     }
 
     /// Compiles all shaders from src to destination
-    pub fn build_dir(self: *const ShaderBuilder, b: *std.Build, src_dir: []const u8, dst_dir: []const u8) !void {
+    pub fn build_dir(self: *const ShaderBuilder, io: Io, alloc: Alloc, src_dir: []const u8, dst_dir: []const u8) !void {
         _ = self;
-        const alloc = b.allocator;
 
-        const cwd = std.fs.cwd();
-        const dir = try cwd.openDir(src_dir, .{ .iterate = true });
+        const cwd = Io.Dir.cwd();
+        const dir = try cwd.openDir(io, src_dir, .{ .iterate = true });
         var it = dir.iterate();
 
-        try cwd.makePath(dst_dir);
+        try cwd.createDirPath(io, dst_dir);
 
-        while (try it.next()) |file| {
+        while (try it.next(io)) |file| {
             if (file.kind != .file) continue;
 
             const src = try std.fmt.allocPrint(alloc, "{s}{s}", .{ src_dir, file.name });
@@ -29,19 +30,16 @@ pub const ShaderBuilder = struct {
             const out = try std.fmt.allocPrint(alloc, "{s}{s}.spv", .{ dst_dir, file.name });
             defer alloc.free(out);
 
-            var cmd = std.process.Child.init(&[_][]const u8{ "glslc", src, "-O", "-Werror", "-o", out }, alloc);
-            try cmd.spawn();
+            var cmd = try std.process.spawn(io, .{ .argv = &[_][]const u8{ "glslc", src, "-O", "-Werror", "-o", out } });
 
-            _ = try cmd.wait();
+            _ = try cmd.wait(io);
         }
     }
 
     // build a single file
-    pub fn build_file(self: *const ShaderBuilder, b: *std.Build, src: []const u8, dst: []const u8) !void {
+    pub fn build_file(self: *const ShaderBuilder, io: Io, src: []const u8, dst: []const u8) !void {
         _ = self;
-        const alloc = b.allocator;
 
-        var cmd = std.process.Child.init(&[_][]const u8{ "glslc", src, "-O", "-Werror", "-o", dst }, alloc);
-        try cmd.spawn();
+        _ = try std.process.spawn(io, .{ .argv = &[_][]const u8{ "glslc", src, "-O", "-Werror", "-o", dst } });
     }
 };
